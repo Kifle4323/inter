@@ -26,14 +26,6 @@ function showNotification(message, type = 'success') {
 
 // Mock data initialization
 function initializeMockData() {
-    // Mock internships
-    if (!localStorage.getItem('internships')) {
-        const internships = [
-            { studentUsername: 'student1', company: 'Tech Corp', position: 'Software Engineer Intern', supervisor: 'supervisor1' },
-            { studentUsername: 'student2', company: 'Web Inc.', position: 'Frontend Developer Intern', supervisor: 'supervisor2' }
-        ];
-        localStorage.setItem('internships', JSON.stringify(internships));
-    }
     // Mock reports (can be empty initially)
     if (!localStorage.getItem('reports')) {
         localStorage.setItem('reports', JSON.stringify([]));
@@ -292,12 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadAssignedStudents() {
-            const internships = JSON.parse(localStorage.getItem('internships')) || [];
-            const myStudents = internships.filter(i => i.supervisor === loggedInUser.username);
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const myStudentsProjects = projects.filter(p => p.supervisor === loggedInUser.username && p.status === 'in_progress');
+            const myStudents = [...new Set(myStudentsProjects.map(p => p.assignedTo))]; // Get unique student usernames
 
             if (myStudents.length > 0) {
-                studentsList.innerHTML = myStudents.map(student =>
-                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student="${student.studentUsername}">${student.studentUsername}</a>`
+                studentsList.innerHTML = myStudents.map(studentUsername =>
+                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student="${studentUsername}">${studentUsername}</a>`
                 ).join('');
 
                 document.querySelectorAll('.student-link').forEach(link => {
@@ -449,10 +442,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const adminName = document.getElementById('admin-name');
         const usersContainer = document.getElementById('users-container');
         const addUserForm = document.getElementById('add-user-form');
-        const internshipsContainer = document.getElementById('internships-container');
-        const addInternshipForm = document.getElementById('add-internship-form');
-        const studentSelect = document.getElementById('student-select');
-        const supervisorSelect = document.getElementById('supervisor-select');
+        // const internshipsContainer = document.getElementById('internships-container'); // Obsolete
+        // const addInternshipForm = document.getElementById('add-internship-form'); // Obsolete
+        // const studentSelect = document.getElementById('student-select'); // Obsolete
+        // const supervisorSelect = document.getElementById('supervisor-select'); // Obsolete
 
         if (loggedInUser) {
             adminName.textContent = loggedInUser.username;
@@ -462,10 +455,10 @@ document.addEventListener('DOMContentLoaded', () => {
         function loadAllData() {
             loadPendingUsers();
             loadProjectApplications();
-            loadCompletedProjectsReview(); // Add this call
+            loadCompletedProjectsReview();
             loadUsers();
-            loadInternships();
-            populateSelects();
+            // loadInternships(); // Obsolete
+            // populateSelects(); // Obsolete
             loadProjects();
         }
 
@@ -671,44 +664,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        function loadInternships() {
-            const internships = JSON.parse(localStorage.getItem('internships')) || [];
-            if (internships.length === 0) {
-                internshipsContainer.innerHTML = '<div class="alert alert-info">No internships assigned yet.</div>';
-                return;
-            }
-            internshipsContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Student</th><th>Company</th><th>Position</th><th>Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
-                internships.map(internship => `
-                    <tr>
-                        <td>${internship.studentUsername}</td>
-                        <td>${internship.company}</td>
-                        <td>${internship.position}</td>
-                        <td>${internship.supervisor}</td>
-                        <td class="text-end"><button class="btn btn-danger btn-sm delete-internship" data-student="${internship.studentUsername}">Delete</button></td>
-                    </tr>
-                `).join('') + '</tbody></table>';
-
-            document.querySelectorAll('.delete-internship').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    if (confirm('Are you sure you want to delete this internship?')) {
-                        deleteInternship(e.target.dataset.student);
-                    }
-                });
-            });
-        }
-
-        function populateSelects() {
-            const users = JSON.parse(localStorage.getItem('users')) || [];
-            const internships = JSON.parse(localStorage.getItem('internships')) || [];
-            const assignedStudents = internships.map(i => i.studentUsername);
-
-            const availableStudents = users.filter(u => u.userType === 'student' && !assignedStudents.includes(u.username));
-            const supervisors = users.filter(u => u.userType === 'supervisor');
-
-            studentSelect.innerHTML = '<option value="">Select Student</option>' + availableStudents.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
-            supervisorSelect.innerHTML = '<option value="">Select Supervisor</option>' + supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
-        }
-
         addUserForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const username = document.getElementById('new-username').value;
@@ -721,30 +676,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            users.push({ username, password, userType });
+            users.push({ username, password, userType, status: 'approved' }); // Admins create approved users
             localStorage.setItem('users', JSON.stringify(users));
             showNotification('User added successfully!');
             addUserForm.reset();
-            loadAllData();
-        });
-
-        addInternshipForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const studentUsername = studentSelect.value;
-            const company = document.getElementById('internship-company').value;
-            const position = document.getElementById('internship-position').value;
-            const supervisor = supervisorSelect.value;
-            let internships = JSON.parse(localStorage.getItem('internships')) || [];
-
-            if (internships.find(i => i.studentUsername === studentUsername)) {
-                showNotification('This student already has an internship assigned.', 'error');
-                return;
-            }
-
-            internships.push({ studentUsername, company, position, supervisor });
-            localStorage.setItem('internships', JSON.stringify(internships));
-            showNotification('Internship assigned successfully!');
-            addInternshipForm.reset();
             loadAllData();
         });
 
@@ -752,14 +687,19 @@ document.addEventListener('DOMContentLoaded', () => {
             let users = JSON.parse(localStorage.getItem('users')) || [];
             users = users.filter(u => u.username !== username);
             localStorage.setItem('users', JSON.stringify(users));
-            deleteInternship(username); // Also delete their internship
-            loadAllData();
-        }
-
-        function deleteInternship(studentUsername) {
-            let internships = JSON.parse(localStorage.getItem('internships')) || [];
-            internships = internships.filter(i => i.studentUsername !== studentUsername);
-            localStorage.setItem('internships', JSON.stringify(internships));
+            // Also delete any project applications from this user
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.pendingStudent === username || p.assignedTo === username);
+            if (projectIndex > -1) {
+                // Handle project cleanup if user is deleted
+                projects[projectIndex].status = 'available';
+                delete projects[projectIndex].pendingStudent;
+                delete projects[projectIndex].assignedTo;
+                delete projects[projectIndex].supervisor;
+                projects[projectIndex].progress = 0;
+                localStorage.setItem('projects', JSON.stringify(projects));
+            }
+            showNotification('User deleted successfully.');
             loadAllData();
         }
 
