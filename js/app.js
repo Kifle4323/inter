@@ -324,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         e.target.classList.add('active');
                         document.getElementById('student-details-content').innerHTML = `
                             <div id="student-project-details-container" class="mb-4"></div>
+                            <div id="student-attendance-container" class="mb-4"></div>
                             <div id="student-reports-container"></div>
                         `; // Clear the initial message and reset containers
                         loadStudentReports(e.target.dataset.student);
@@ -547,6 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadPendingUsers();
             loadProjectApplications();
             loadCompletedProjectsReview();
+            loadSupervisorAssignments(); // Add this call
             loadUsers();
             // loadInternships(); // Obsolete
             // populateSelects(); // Obsolete
@@ -563,22 +565,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const supervisors = users.filter(u => u.userType === 'supervisor');
-            const supervisorOptions = supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
-
-            pendingUsersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Full Name</th><th>University</th><th>CV</th><th>Assign Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
+            pendingUsersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Full Name</th><th>University</th><th>CV</th><th class="text-end">Action</th></tr></thead><tbody>' +
                 pendingStudents.map(user => `
                     <tr>
                         <td>${user.username}<br><small>${user.major}</small></td>
                         <td>${user.fullName}</td>
                         <td>${user.university}</td>
                         <td>${user.cv}</td>
-                        <td>
-                            <select class="form-select form-select-sm" id="supervisor-for-student-${user.username}">
-                                <option value="">Select...</option>
-                                ${supervisorOptions}
-                            </select>
-                        </td>
                         <td class="text-end">
                             <button class="btn btn-success btn-sm approve-user" data-username="${user.username}">Approve</button>
                             <button class="btn btn-danger btn-sm reject-user" data-username="${user.username}">Reject</button>
@@ -588,13 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.querySelectorAll('.approve-user').forEach(button => {
                 button.addEventListener('click', (e) => {
-                    const username = e.target.dataset.username;
-                    const supervisorSelect = document.getElementById(`supervisor-for-student-${username}`);
-                    if (supervisorSelect.value) {
-                        approveUser(username, supervisorSelect.value);
-                    } else {
-                        showNotification('Please assign a supervisor.', 'error');
-                    }
+                    approveUser(e.target.dataset.username);
                 });
             });
             document.querySelectorAll('.reject-user').forEach(button => {
@@ -606,12 +593,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        function approveUser(username, supervisorUsername) {
+        function approveUser(username) {
             let users = JSON.parse(localStorage.getItem('users')) || [];
             const userIndex = users.findIndex(u => u.username === username);
             if (userIndex > -1) {
                 users[userIndex].status = 'approved';
-                users[userIndex].supervisor = supervisorUsername; // Assign supervisor
                 localStorage.setItem('users', JSON.stringify(users));
                 showNotification('User approved successfully.');
                 loadAllData();
@@ -726,6 +712,62 @@ document.addEventListener('DOMContentLoaded', () => {
                 projects[projectIndex].status = 'completed';
                 localStorage.setItem('projects', JSON.stringify(projects));
                 showNotification('Project completion confirmed!');
+                loadAllData();
+            }
+        }
+
+        function loadSupervisorAssignments() {
+            const container = document.getElementById('assign-supervisor-container');
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+
+            const unassignedStudents = users.filter(u => u.userType === 'student' && u.status === 'approved' && !u.supervisor);
+            const supervisors = users.filter(u => u.userType === 'supervisor');
+
+            if (unassignedStudents.length === 0) {
+                container.innerHTML = '<div class="alert alert-secondary">No students are awaiting a supervisor assignment.</div>';
+                return;
+            }
+
+            const supervisorOptions = supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
+
+            container.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Student</th><th>Full Name</th><th>University</th><th>Assign Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
+                unassignedStudents.map(student => `
+                    <tr>
+                        <td>${student.username}</td>
+                        <td>${student.fullName}</td>
+                        <td>${student.university}</td>
+                        <td>
+                            <select class="form-select form-select-sm" id="assign-supervisor-for-${student.username}">
+                                <option value="">Select...</option>
+                                ${supervisorOptions}
+                            </select>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-primary btn-sm assign-supervisor" data-username="${student.username}">Assign</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+
+            document.querySelectorAll('.assign-supervisor').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const studentUsername = e.target.dataset.username;
+                    const supervisorSelect = document.getElementById(`assign-supervisor-for-${studentUsername}`);
+                    if (supervisorSelect.value) {
+                        handleAssignSupervisor(studentUsername, supervisorSelect.value);
+                    } else {
+                        showNotification('Please select a supervisor.', 'error');
+                    }
+                });
+            });
+        }
+
+        function handleAssignSupervisor(studentUsername, supervisorUsername) {
+            let users = JSON.parse(localStorage.getItem('users')) || [];
+            const userIndex = users.findIndex(u => u.username === studentUsername);
+            if (userIndex > -1) {
+                users[userIndex].supervisor = supervisorUsername;
+                localStorage.setItem('users', JSON.stringify(users));
+                showNotification('Supervisor assigned successfully.');
                 loadAllData();
             }
         }
