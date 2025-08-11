@@ -302,19 +302,77 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadAllData() {
+            loadPendingUsers();
             loadUsers();
             loadInternships();
             populateSelects();
         }
 
+        function loadPendingUsers() {
+            const pendingUsersContainer = document.getElementById('pending-users-container');
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const pendingStudents = users.filter(u => u.userType === 'student' && u.status === 'pending');
+
+            if (pendingStudents.length === 0) {
+                pendingUsersContainer.innerHTML = '<div class="alert alert-secondary">No pending registrations.</div>';
+                return;
+            }
+
+            pendingUsersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Full Name</th><th>University</th><th>Major</th><th>CV</th><th class="text-end">Action</th></tr></thead><tbody>' +
+                pendingStudents.map(user => `
+                    <tr>
+                        <td>${user.username}</td>
+                        <td>${user.fullName}</td>
+                        <td>${user.university}</td>
+                        <td>${user.major}</td>
+                        <td>${user.cv}</td>
+                        <td class="text-end">
+                            <button class="btn btn-success btn-sm approve-user" data-username="${user.username}">Approve</button>
+                            <button class="btn btn-danger btn-sm reject-user" data-username="${user.username}">Reject</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+
+            document.querySelectorAll('.approve-user').forEach(button => {
+                button.addEventListener('click', (e) => approveUser(e.target.dataset.username));
+            });
+            document.querySelectorAll('.reject-user').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    if (confirm('Are you sure you want to reject this registration?')) {
+                        rejectUser(e.target.dataset.username);
+                    }
+                });
+            });
+        }
+
+        function approveUser(username) {
+            let users = JSON.parse(localStorage.getItem('users')) || [];
+            const userIndex = users.findIndex(u => u.username === username);
+            if (userIndex > -1) {
+                users[userIndex].status = 'approved';
+                localStorage.setItem('users', JSON.stringify(users));
+                showNotification('User approved successfully.');
+                loadAllData();
+            }
+        }
+
+        function rejectUser(username) {
+            let users = JSON.parse(localStorage.getItem('users')) || [];
+            users = users.filter(u => u.username !== username);
+            localStorage.setItem('users', JSON.stringify(users));
+            showNotification('User rejected and removed.');
+            loadAllData();
+        }
+
         function loadUsers() {
             const users = JSON.parse(localStorage.getItem('users')) || [];
-            if (users.filter(u => u.userType !== 'admin').length === 0) {
-                usersContainer.innerHTML = '<div class="alert alert-info">No students or supervisors found.</div>';
+            const approvedUsers = users.filter(u => u.userType !== 'admin' && u.status !== 'pending');
+            if (approvedUsers.length === 0) {
+                usersContainer.innerHTML = '<div class="alert alert-info">No approved students or supervisors found.</div>';
                 return;
             }
             usersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Type</th><th class="text-end">Action</th></tr></thead><tbody>' +
-                users.filter(u => u.userType !== 'admin').map(user => `
+                approvedUsers.map(user => `
                     <tr>
                         <td>${user.username}</td>
                         <td><span class="badge bg-secondary">${user.userType}</span></td>
