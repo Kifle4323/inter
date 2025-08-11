@@ -38,6 +38,10 @@ function initializeMockData() {
     if (!localStorage.getItem('reports')) {
         localStorage.setItem('reports', JSON.stringify([]));
     }
+    // Mock projects
+    if (!localStorage.getItem('projects')) {
+        localStorage.setItem('projects', JSON.stringify([]));
+    }
 }
 
 initializeMockData();
@@ -130,28 +134,95 @@ document.addEventListener('DOMContentLoaded', () => {
     // Student Dashboard Logic
     if (window.location.pathname.endsWith('student_dashboard.html')) {
         const studentName = document.getElementById('student-name');
-        const internshipInfo = document.getElementById('internship-info');
         const reportForm = document.getElementById('report-form');
         const reportsList = document.getElementById('reports-list');
+        const reportSubmissionCard = document.getElementById('report-submission-card');
+        const projectStatusContainer = document.getElementById('project-status-container');
+        const availableProjectsContainer = document.getElementById('available-projects-container');
 
         if (loggedInUser) {
             studentName.textContent = loggedInUser.username;
-            loadInternshipDetails();
-            loadReports();
+            loadStudentProjectView();
+            loadReports(); // This can be called, it will just show an empty state initially
         }
 
-        function loadInternshipDetails() {
-            const internships = JSON.parse(localStorage.getItem('internships')) || [];
-            const myInternship = internships.find(i => i.studentUsername === loggedInUser.username);
+        function loadStudentProjectView() {
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const myProject = projects.find(p => p.assignedTo === loggedInUser.username || p.pendingStudent === loggedInUser.username);
 
-            if (myInternship) {
-                internshipInfo.innerHTML = `
-                    <p><strong>Company:</strong> ${myInternship.company}</p>
-                    <p><strong>Position:</strong> ${myInternship.position}</p>
-                    <p><strong>Supervisor:</strong> ${myInternship.supervisor}</p>
+            if (myProject) {
+                // Student has a project (either pending or approved)
+                availableProjectsContainer.style.display = 'none';
+                loadProjectStatus();
+                if(myProject.status === 'in_progress') {
+                    reportSubmissionCard.style.display = 'block';
+                }
+            } else {
+                // Student has no project, show available projects
+                loadAvailableProjects();
+                projectStatusContainer.innerHTML = '<div class="alert alert-info">Apply for a project to get started.</div>';
+                reportSubmissionCard.style.display = 'none';
+            }
+        }
+
+        function loadAvailableProjects() {
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const availableProjects = projects.filter(p => p.status === 'available');
+
+            if (availableProjects.length === 0) {
+                availableProjectsContainer.innerHTML = '<div class="alert alert-secondary">No projects are available at this time.</div>';
+                return;
+            }
+
+            availableProjectsContainer.innerHTML = availableProjects.map(project => `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">${project.title}</h5>
+                        <p class="card-text">${project.description}</p>
+                        <button class="btn btn-primary apply-project" data-id="${project.id}">Apply</button>
+                    </div>
+                </div>
+            `).join('');
+
+            document.querySelectorAll('.apply-project').forEach(button => {
+                button.addEventListener('click', (e) => handleProjectApplication(e.target.dataset.id));
+            });
+        }
+
+        function handleProjectApplication(projectId) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'pending_approval';
+                projects[projectIndex].pendingStudent = loggedInUser.username;
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Application submitted successfully! Waiting for admin approval.');
+                loadStudentProjectView(); // Refresh the view
+            }
+        }
+
+        function loadProjectStatus() {
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const myProject = projects.find(p => p.assignedTo === loggedInUser.username || p.pendingStudent === loggedInUser.username);
+
+            if (myProject) {
+                let statusBadge;
+                if (myProject.status === 'in_progress') statusBadge = 'bg-primary';
+                else if (myProject.status === 'pending_approval') statusBadge = 'bg-warning text-dark';
+                else if (myProject.status === 'completed') statusBadge = 'bg-success';
+                else statusBadge = 'bg-secondary';
+
+                projectStatusContainer.innerHTML = `
+                    <h5>${myProject.title}</h5>
+                    <p><strong>Status:</strong> <span class="badge ${statusBadge}">${myProject.status.replace('_', ' ')}</span></p>
+                    <p><strong>Supervisor:</strong> ${myProject.supervisor || 'Not assigned yet'}</p>
+                    <div class="progress" role="progressbar" aria-valuenow="${myProject.progress}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar" style="width: ${myProject.progress}%">${myProject.progress}%</div>
+                    </div>
                 `;
             } else {
-                internshipInfo.innerHTML = '<p>Your internship has not been assigned yet.</p>';
+                 projectStatusContainer.innerHTML = '<div class="alert alert-info">Apply for a project to get started.</div>';
             }
         }
 
@@ -235,6 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadStudentReports(studentUsername) {
+            loadStudentProjectDetails(studentUsername); // New function call
+
             reportsContainer.innerHTML = `<h4 class="mb-3">Reports for ${studentUsername}</h4>`;
             const reports = JSON.parse(localStorage.getItem('reports')) || [];
             const studentReports = reports.filter(r => r.studentUsername === studentUsername);
@@ -284,6 +357,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 showNotification('Feedback saved successfully!');
             }
         }
+
+        function loadStudentProjectDetails(studentUsername) {
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const project = projects.find(p => p.assignedTo === studentUsername);
+            const container = document.getElementById('student-project-details-container');
+
+            if (!project || project.status !== 'in_progress') {
+                container.innerHTML = '';
+                return;
+            }
+
+            let completeButton = '';
+            if (project.progress == 100) {
+                completeButton = `<button class="btn btn-warning mt-2" id="request-completion-btn" data-id="${project.id}">Request Completion Approval</button>`;
+            }
+
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-header"><h3 class="h5 mb-0">Project Progress: ${project.title}</h3></div>
+                    <div class="card-body">
+                        <form id="progress-update-form" data-id="${project.id}">
+                            <label for="progress-range" class="form-label">Progress: <span id="progress-value">${project.progress}</span>%</label>
+                            <input type="range" class="form-range" min="0" max="100" value="${project.progress}" id="progress-range">
+                            <button type="submit" class="btn btn-primary btn-sm">Update Progress</button>
+                            ${completeButton}
+                        </form>
+                    </div>
+                </div>
+            `;
+
+            const rangeInput = document.getElementById('progress-range');
+            const progressValue = document.getElementById('progress-value');
+            rangeInput.addEventListener('input', () => {
+                progressValue.textContent = rangeInput.value;
+            });
+
+            document.getElementById('progress-update-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                updateProjectProgress(e.target.dataset.id, rangeInput.value);
+            });
+
+            if (project.progress == 100) {
+                document.getElementById('request-completion-btn').addEventListener('click', (e) => {
+                    requestCompletion(e.target.dataset.id);
+                });
+            }
+        }
+
+        function updateProjectProgress(projectId, progress) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+
+            if (projectIndex > -1) {
+                projects[projectIndex].progress = progress;
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Progress updated successfully!');
+                loadStudentProjectDetails(projects[projectIndex].assignedTo); // Refresh the view
+            }
+        }
+
+        function requestCompletion(projectId) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'pending_completion_approval';
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Project marked as complete. Awaiting admin approval.');
+                loadStudentProjectDetails(projects[projectIndex].assignedTo);
+                document.getElementById('student-project-details-container').innerHTML = ''; // Hide after action
+            }
+        }
     }
 
     // Admin Dashboard Logic
@@ -303,9 +448,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function loadAllData() {
             loadPendingUsers();
+            loadProjectApplications();
+            loadCompletedProjectsReview(); // Add this call
             loadUsers();
             loadInternships();
             populateSelects();
+            loadProjects();
         }
 
         function loadPendingUsers() {
@@ -362,6 +510,118 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('users', JSON.stringify(users));
             showNotification('User rejected and removed.');
             loadAllData();
+        }
+
+        function loadProjectApplications() {
+            const applicationsContainer = document.getElementById('project-applications-container');
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const pendingProjects = projects.filter(p => p.status === 'pending_approval');
+
+            if (pendingProjects.length === 0) {
+                applicationsContainer.innerHTML = '<div class="alert alert-secondary">No pending project applications.</div>';
+                return;
+            }
+
+            const supervisors = users.filter(u => u.userType === 'supervisor');
+            const supervisorOptions = supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
+
+            applicationsContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Project Title</th><th>Student</th><th>Assign Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
+                pendingProjects.map(project => `
+                    <tr>
+                        <td>${project.title}</td>
+                        <td>${project.pendingStudent}</td>
+                        <td>
+                            <select class="form-select form-select-sm" id="supervisor-for-${project.id}">
+                                <option value="">Select...</option>
+                                ${supervisorOptions}
+                            </select>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-success btn-sm approve-project" data-id="${project.id}">Approve</button>
+                            <button class="btn btn-danger btn-sm reject-project" data-id="${project.id}">Reject</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+
+            document.querySelectorAll('.approve-project').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const projectId = e.target.dataset.id;
+                    const supervisorSelect = document.getElementById(`supervisor-for-${projectId}`);
+                    if (supervisorSelect.value) {
+                        handleProjectApproval(projectId, supervisorSelect.value);
+                    } else {
+                        showNotification('Please assign a supervisor.', 'error');
+                    }
+                });
+            });
+            document.querySelectorAll('.reject-project').forEach(button => {
+                button.addEventListener('click', (e) => handleProjectRejection(e.target.dataset.id));
+            });
+        }
+
+        function handleProjectApproval(projectId, supervisorUsername) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'in_progress';
+                projects[projectIndex].assignedTo = projects[projectIndex].pendingStudent;
+                projects[projectIndex].supervisor = supervisorUsername;
+                delete projects[projectIndex].pendingStudent;
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Project approved successfully.');
+                loadAllData();
+            }
+        }
+
+        function handleProjectRejection(projectId) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'available';
+                delete projects[projectIndex].pendingStudent;
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Project application rejected.');
+                loadAllData();
+            }
+        }
+
+        function loadCompletedProjectsReview() {
+            const container = document.getElementById('completed-projects-container');
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const completedProjects = projects.filter(p => p.status === 'pending_completion_approval');
+
+            if (completedProjects.length === 0) {
+                container.innerHTML = '<div class="alert alert-secondary">No projects awaiting final completion approval.</div>';
+                return;
+            }
+
+            container.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Project Title</th><th>Student</th><th>Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
+                completedProjects.map(project => `
+                    <tr>
+                        <td>${project.title}</td>
+                        <td>${project.assignedTo}</td>
+                        <td>${project.supervisor}</td>
+                        <td class="text-end">
+                            <button class="btn btn-success btn-sm confirm-completion" data-id="${project.id}">Confirm Completion</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+
+            document.querySelectorAll('.confirm-completion').forEach(button => {
+                button.addEventListener('click', (e) => handleFinalCompletion(e.target.dataset.id));
+            });
+        }
+
+        function handleFinalCompletion(projectId) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'completed';
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Project completion confirmed!');
+                loadAllData();
+            }
         }
 
         function loadUsers() {
@@ -479,6 +739,75 @@ document.addEventListener('DOMContentLoaded', () => {
             internships = internships.filter(i => i.studentUsername !== studentUsername);
             localStorage.setItem('internships', JSON.stringify(internships));
             loadAllData();
+        }
+
+        // Project CRUD Functions
+        const addProjectForm = document.getElementById('add-project-form');
+
+        function loadProjects() {
+            const projectsContainer = document.getElementById('projects-container');
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+
+            if (projects.length === 0) {
+                projectsContainer.innerHTML = '<div class="alert alert-secondary">No projects created yet.</div>';
+                return;
+            }
+
+            projectsContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Title</th><th>Status</th><th>Assigned To</th><th>Progress</th><th class="text-end">Action</th></tr></thead><tbody>' +
+                projects.map(project => `
+                    <tr>
+                        <td>${project.title}</td>
+                        <td><span class="badge bg-info">${project.status.replace('_', ' ')}</span></td>
+                        <td>${project.assignedTo || 'N/A'}</td>
+                        <td>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar" style="width: ${project.progress}%;">${project.progress}%</div>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-danger btn-sm delete-project" data-id="${project.id}">Delete</button>
+                        </td>
+                    </tr>
+                `).join('') + '</tbody></table>';
+
+            document.querySelectorAll('.delete-project').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    if (confirm('Are you sure you want to delete this project?')) {
+                        deleteProject(e.target.dataset.id);
+                    }
+                });
+            });
+        }
+
+        addProjectForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const title = document.getElementById('project-title').value;
+            const description = document.getElementById('project-description').value;
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+
+            const newProject = {
+                id: Date.now(),
+                title,
+                description,
+                status: 'available',
+                assignedTo: null,
+                supervisor: null,
+                progress: 0
+            };
+
+            projects.push(newProject);
+            localStorage.setItem('projects', JSON.stringify(projects));
+            showNotification('Project added successfully!');
+            addProjectForm.reset();
+            loadProjects();
+        });
+
+        function deleteProject(projectId) {
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            projects = projects.filter(p => p.id != projectId);
+            localStorage.setItem('projects', JSON.stringify(projects));
+            showNotification('Project deleted successfully.');
+            loadProjects();
         }
     }
 });
