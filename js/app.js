@@ -34,6 +34,10 @@ function initializeMockData() {
     if (!localStorage.getItem('projects')) {
         localStorage.setItem('projects', JSON.stringify([]));
     }
+    // Mock attendance
+    if (!localStorage.getItem('attendance')) {
+        localStorage.setItem('attendance', JSON.stringify([]));
+    }
 }
 
 initializeMockData();
@@ -136,7 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
             studentName.textContent = loggedInUser.username;
             loadSupervisorInfo();
             loadStudentProjectView();
-            loadReports(); // This can be called, it will just show an empty state initially
+            loadReports();
+            loadStudentAttendanceHistory(); // Add this call
         }
 
         function loadSupervisorInfo() {
@@ -270,6 +275,24 @@ document.addEventListener('DOMContentLoaded', () => {
             reportForm.reset();
             loadReports(); // Refresh the list
         });
+
+        function loadStudentAttendanceHistory() {
+            const container = document.getElementById('student-attendance-history-container');
+            const attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
+            const myAttendance = attendanceRecords.filter(a => a.studentUsername === loggedInUser.username);
+
+            if (myAttendance.length === 0) {
+                container.innerHTML = '<p>No attendance records found.</p>';
+                return;
+            }
+
+            container.innerHTML = '<table class="table table-sm table-striped"><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>' +
+                myAttendance.map(rec => {
+                    const statusClass = rec.status === 'Present' ? 'text-success' : 'text-danger';
+                    return `<tr><td>${rec.date}</td><td class="fw-bold ${statusClass}">${rec.status}</td></tr>`
+                }).join('') +
+                '</tbody></table>';
+        }
     }
 
     // Supervisor Dashboard Logic
@@ -313,6 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function loadStudentReports(studentUsername) {
             loadStudentProjectDetails(studentUsername); // New function call
+            loadAttendance(studentUsername); // Add this call
 
             reportsContainer.innerHTML = `<h4 class="mb-3">Reports for ${studentUsername}</h4>`;
             const reports = JSON.parse(localStorage.getItem('reports')) || [];
@@ -434,6 +458,73 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadStudentProjectDetails(projects[projectIndex].assignedTo);
                 document.getElementById('student-project-details-container').innerHTML = ''; // Hide after action
             }
+        }
+
+        function loadAttendance(studentUsername) {
+            const container = document.getElementById('student-attendance-container');
+            const attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
+            const studentAttendance = attendanceRecords.filter(a => a.studentUsername === studentUsername);
+
+            let historyTable = '<p>No attendance records yet.</p>';
+            if (studentAttendance.length > 0) {
+                historyTable = '<table class="table table-sm table-striped"><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>' +
+                studentAttendance.map(rec => `<tr><td>${rec.date}</td><td>${rec.status}</td></tr>`).join('') +
+                '</tbody></table>';
+            }
+
+            container.innerHTML = `
+                <div class="card">
+                    <div class="card-header"><h3 class="h5 mb-0">Manage Attendance</h3></div>
+                    <div class="card-body">
+                        <form id="attendance-form" data-student="${studentUsername}">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="attendance-date" class="form-label">Date</label>
+                                    <input type="date" class="form-control" id="attendance-date" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="attendance-status" class="form-label">Status</label>
+                                    <select class="form-select" id="attendance-status">
+                                        <option value="Present">Present</option>
+                                        <option value="Absent">Absent</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-secondary btn-sm">Mark Attendance</button>
+                        </form>
+                        <hr>
+                        <h5>Attendance History</h5>
+                        ${historyTable}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('attendance-form').addEventListener('submit', handleMarkAttendance);
+        }
+
+        function handleMarkAttendance(e) {
+            e.preventDefault();
+            const studentUsername = e.target.dataset.student;
+            const date = document.getElementById('attendance-date').value;
+            const status = document.getElementById('attendance-status').value;
+
+            if (!date) {
+                showNotification('Please select a date.', 'error');
+                return;
+            }
+
+            let attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
+            // Optional: check for duplicate entry for the same student on the same date
+            const existingRecord = attendanceRecords.findIndex(rec => rec.studentUsername === studentUsername && rec.date === date);
+            if (existingRecord > -1) {
+                attendanceRecords[existingRecord].status = status; // Update existing
+            } else {
+                attendanceRecords.push({ studentUsername, date, status });
+            }
+
+            localStorage.setItem('attendance', JSON.stringify(attendanceRecords));
+            showNotification('Attendance marked successfully.');
+            loadAttendance(studentUsername); // Refresh attendance view
         }
     }
 
