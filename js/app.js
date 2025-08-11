@@ -1,3 +1,22 @@
+// --- Theme Management ---
+function setTheme(theme) {
+    const themeToggleSwitch = document.getElementById('theme-toggle');
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-bs-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        if (themeToggleSwitch) themeToggleSwitch.checked = true;
+    } else {
+        document.documentElement.setAttribute('data-bs-theme', 'light');
+        localStorage.setItem('theme', 'light');
+        if (themeToggleSwitch) themeToggleSwitch.checked = false;
+    }
+}
+
+// Apply saved theme on initial load
+const savedTheme = localStorage.getItem('theme') || 'light';
+setTheme(savedTheme);
+// --- End Theme Management ---
+
 function showNotification(message, type = 'success') {
     const container = document.getElementById('notification-container');
     if (!container) return;
@@ -71,7 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             <a class="nav-link" href="profile.html">Profile</a>
                         </li>
                     </ul>
-                    <ul class="navbar-nav">
+                    <ul class="navbar-nav ms-auto">
+                        <li class="nav-item d-flex align-items-center me-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="theme-toggle">
+                                <label class="form-check-label" for="theme-toggle">Dark Mode</label>
+                            </div>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#" id="logout">Logout</a>
                         </li>
@@ -87,6 +112,15 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionStorage.removeItem('loggedInUser');
             window.location.href = 'index.html';
         });
+
+        // Add event listener for the theme toggle
+        const themeToggleSwitch = document.getElementById('theme-toggle');
+        if (themeToggleSwitch) {
+            themeToggleSwitch.checked = (localStorage.getItem('theme') === 'dark');
+            themeToggleSwitch.addEventListener('change', (e) => {
+                setTheme(e.target.checked ? 'dark' : 'light');
+            });
+        }
     }
 
     // Profile page logic
