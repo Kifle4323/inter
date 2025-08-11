@@ -142,8 +142,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (loggedInUser) {
             studentName.textContent = loggedInUser.username;
+            loadSupervisorInfo();
             loadStudentProjectView();
             loadReports(); // This can be called, it will just show an empty state initially
+        }
+
+        function loadSupervisorInfo() {
+            const container = document.getElementById('supervisor-info-container');
+            if (loggedInUser && loggedInUser.supervisor) {
+                container.innerHTML = `<p class="mb-0">Your assigned supervisor is <strong>${loggedInUser.supervisor}</strong>.</p>`;
+            } else {
+                container.innerHTML = `<p class="mb-0 text-muted">Not yet assigned.</p>`;
+            }
         }
 
         function loadStudentProjectView() {
@@ -216,7 +226,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 projectStatusContainer.innerHTML = `
                     <h5>${myProject.title}</h5>
                     <p><strong>Status:</strong> <span class="badge ${statusBadge}">${myProject.status.replace('_', ' ')}</span></p>
-                    <p><strong>Supervisor:</strong> ${myProject.supervisor || 'Not assigned yet'}</p>
                     <div class="progress" role="progressbar" aria-valuenow="${myProject.progress}" aria-valuemin="0" aria-valuemax="100">
                         <div class="progress-bar" style="width: ${myProject.progress}%">${myProject.progress}%</div>
                     </div>
@@ -297,6 +306,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Optional: highlight the active student
                         document.querySelectorAll('.student-link').forEach(l => l.classList.remove('active'));
                         e.target.classList.add('active');
+                        document.getElementById('student-details-content').innerHTML = `
+                            <div id="student-project-details-container" class="mb-4"></div>
+                            <div id="student-reports-container"></div>
+                        `; // Clear the initial message and reset containers
                         loadStudentReports(e.target.dataset.student);
                     });
                 });
@@ -466,14 +479,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            pendingUsersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Full Name</th><th>University</th><th>Major</th><th>CV</th><th class="text-end">Action</th></tr></thead><tbody>' +
+            const supervisors = users.filter(u => u.userType === 'supervisor');
+            const supervisorOptions = supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
+
+            pendingUsersContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Username</th><th>Full Name</th><th>University</th><th>CV</th><th>Assign Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
                 pendingStudents.map(user => `
                     <tr>
-                        <td>${user.username}</td>
+                        <td>${user.username}<br><small>${user.major}</small></td>
                         <td>${user.fullName}</td>
                         <td>${user.university}</td>
-                        <td>${user.major}</td>
                         <td>${user.cv}</td>
+                        <td>
+                            <select class="form-select form-select-sm" id="supervisor-for-student-${user.username}">
+                                <option value="">Select...</option>
+                                ${supervisorOptions}
+                            </select>
+                        </td>
                         <td class="text-end">
                             <button class="btn btn-success btn-sm approve-user" data-username="${user.username}">Approve</button>
                             <button class="btn btn-danger btn-sm reject-user" data-username="${user.username}">Reject</button>
@@ -482,7 +503,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('') + '</tbody></table>';
 
             document.querySelectorAll('.approve-user').forEach(button => {
-                button.addEventListener('click', (e) => approveUser(e.target.dataset.username));
+                button.addEventListener('click', (e) => {
+                    const username = e.target.dataset.username;
+                    const supervisorSelect = document.getElementById(`supervisor-for-student-${username}`);
+                    if (supervisorSelect.value) {
+                        approveUser(username, supervisorSelect.value);
+                    } else {
+                        showNotification('Please assign a supervisor.', 'error');
+                    }
+                });
             });
             document.querySelectorAll('.reject-user').forEach(button => {
                 button.addEventListener('click', (e) => {
@@ -493,11 +522,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        function approveUser(username) {
+        function approveUser(username, supervisorUsername) {
             let users = JSON.parse(localStorage.getItem('users')) || [];
             const userIndex = users.findIndex(u => u.username === username);
             if (userIndex > -1) {
                 users[userIndex].status = 'approved';
+                users[userIndex].supervisor = supervisorUsername; // Assign supervisor
                 localStorage.setItem('users', JSON.stringify(users));
                 showNotification('User approved successfully.');
                 loadAllData();
@@ -515,7 +545,6 @@ document.addEventListener('DOMContentLoaded', () => {
         function loadProjectApplications() {
             const applicationsContainer = document.getElementById('project-applications-container');
             const projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const users = JSON.parse(localStorage.getItem('users')) || [];
             const pendingProjects = projects.filter(p => p.status === 'pending_approval');
 
             if (pendingProjects.length === 0) {
@@ -523,20 +552,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const supervisors = users.filter(u => u.userType === 'supervisor');
-            const supervisorOptions = supervisors.map(s => `<option value="${s.username}">${s.username}</option>`).join('');
-
-            applicationsContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Project Title</th><th>Student</th><th>Assign Supervisor</th><th class="text-end">Action</th></tr></thead><tbody>' +
+            applicationsContainer.innerHTML = '<table class="table table-striped table-hover"><thead><tr><th>Project Title</th><th>Student</th><th class="text-end">Action</th></tr></thead><tbody>' +
                 pendingProjects.map(project => `
                     <tr>
                         <td>${project.title}</td>
                         <td>${project.pendingStudent}</td>
-                        <td>
-                            <select class="form-select form-select-sm" id="supervisor-for-${project.id}">
-                                <option value="">Select...</option>
-                                ${supervisorOptions}
-                            </select>
-                        </td>
                         <td class="text-end">
                             <button class="btn btn-success btn-sm approve-project" data-id="${project.id}">Approve</button>
                             <button class="btn btn-danger btn-sm reject-project" data-id="${project.id}">Reject</button>
@@ -545,28 +565,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('') + '</tbody></table>';
 
             document.querySelectorAll('.approve-project').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const projectId = e.target.dataset.id;
-                    const supervisorSelect = document.getElementById(`supervisor-for-${projectId}`);
-                    if (supervisorSelect.value) {
-                        handleProjectApproval(projectId, supervisorSelect.value);
-                    } else {
-                        showNotification('Please assign a supervisor.', 'error');
-                    }
-                });
+                button.addEventListener('click', (e) => handleProjectApproval(e.target.dataset.id));
             });
             document.querySelectorAll('.reject-project').forEach(button => {
                 button.addEventListener('click', (e) => handleProjectRejection(e.target.dataset.id));
             });
         }
 
-        function handleProjectApproval(projectId, supervisorUsername) {
+        function handleProjectApproval(projectId) {
             let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            let users = JSON.parse(localStorage.getItem('users')) || [];
             const projectIndex = projects.findIndex(p => p.id == projectId);
+
             if (projectIndex > -1) {
+                const studentUsername = projects[projectIndex].pendingStudent;
+                const student = users.find(u => u.username === studentUsername);
+
+                if (!student || !student.supervisor) {
+                    showNotification('Error: Student does not have an assigned supervisor.', 'error');
+                    return;
+                }
+
                 projects[projectIndex].status = 'in_progress';
-                projects[projectIndex].assignedTo = projects[projectIndex].pendingStudent;
-                projects[projectIndex].supervisor = supervisorUsername;
+                projects[projectIndex].assignedTo = studentUsername;
+                projects[projectIndex].supervisor = student.supervisor; // Use pre-assigned supervisor
                 delete projects[projectIndex].pendingStudent;
                 localStorage.setItem('projects', JSON.stringify(projects));
                 showNotification('Project approved successfully.');
