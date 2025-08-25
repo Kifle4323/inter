@@ -343,11 +343,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Supervisor Dashboard Logic
+
+    // Supervisor Dashboard Logic - REWRITTEN
     if (window.location.pathname.endsWith('supervisor_dashboard.html')) {
         const supervisorName = document.getElementById('supervisor-name');
         const studentsList = document.getElementById('students-list');
-        const reportsContainer = document.getElementById('student-reports-container');
+        const studentDetailsContent = document.getElementById('student-details-content');
 
         if (loggedInUser) {
             supervisorName.textContent = loggedInUser.username;
@@ -360,21 +361,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (myStudents.length > 0) {
                 studentsList.innerHTML = myStudents.map(student =>
-                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student="${student.username}">${student.fullName} (${student.username})</a>`
+                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student-username="${student.username}">${student.fullName} (${student.username})</a>`
                 ).join('');
 
                 document.querySelectorAll('.student-link').forEach(link => {
-                    link.addEventListener('click', (e) => {
+                    link.addEventListener('click', e => {
                         e.preventDefault();
-                        // Optional: highlight the active student
                         document.querySelectorAll('.student-link').forEach(l => l.classList.remove('active'));
                         e.target.classList.add('active');
-                        document.getElementById('student-details-content').innerHTML = `
-                            <div id="student-project-details-container" class="mb-4"></div>
-                            <div id="student-attendance-container" class="mb-4"></div>
-                            <div id="student-reports-container"></div>
-                        `; // Clear the initial message and reset containers
-                        loadStudentReports(e.target.dataset.student);
+                        displayStudentDetails(e.target.dataset.studentUsername);
                     });
                 });
             } else {
@@ -382,202 +377,135 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        function loadStudentReports(studentUsername) {
-            loadStudentProjectDetails(studentUsername); // New function call
-            loadAttendance(studentUsername); // Add this call
+        function displayStudentDetails(studentUsername) {
+            // Clear previous details
+            studentDetailsContent.innerHTML = `
+                <div id="student-project-details-container" class="mb-4"></div>
+                <div id="student-attendance-container" class="mb-4"></div>
+                <div id="student-reports-container"></div>
+            `;
 
-            reportsContainer.innerHTML = `<h4 class="mb-3">Reports for ${studentUsername}</h4>`;
-            const projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const activeProject = projects.find(p => p.assignedTo === studentUsername && p.status === 'in_progress');
-
-            if (!activeProject) {
-                reportsContainer.innerHTML += '<div class="alert alert-warning">This student does not have an active project yet. Reports can be submitted once a project is in progress.</div>';
-                return;
-            }
-
-            const reports = JSON.parse(localStorage.getItem('reports')) || [];
-            const studentReports = reports.filter(r => r.studentUsername === studentUsername);
-
-            if (studentReports.length > 0) {
-                reportsContainer.innerHTML += studentReports.map(report => `
-                    <div class="card mb-3">
-                        <div class="card-header d-flex justify-content-between">
-                            <h5 class="mb-0">${report.title}</h5>
-                            <small>Submitted on: ${new Date(report.timestamp).toLocaleDateString()}</small>
-                        </div>
-                        <div class="card-body">
-                            <p class="card-text">${report.content}</p>
-                            <hr>
-                            <form class="feedback-form" data-report-id="${report.id}">
-                                <div class="mb-3">
-                                    <label class="form-label"><strong>Your Feedback:</strong></label>
-                                    <textarea class="form-control" name="feedback" rows="3" placeholder="Provide feedback...">${report.feedback || ''}</textarea>
-                                </div>
-                                <button type="submit" class="btn btn-sm btn-success">Save Feedback</button>
-                            </form>
-                        </div>
-                    </div>
-                `).join('');
-
-                document.querySelectorAll('.feedback-form').forEach(form => {
-                    form.addEventListener('submit', saveFeedback);
-                });
-            } else {
-                reportsContainer.innerHTML += '<div class="alert alert-secondary">This student has not submitted any reports.</div>';
-            }
+            // Render all components for the selected student
+            displayProjectDetails(studentUsername);
+            displayAttendance(studentUsername);
+            displayReports(studentUsername);
         }
 
-        function saveFeedback(e) {
-            e.preventDefault();
-            const reportId = e.target.dataset.reportId;
-            const feedbackText = e.target.querySelector('textarea').value;
-            const reports = JSON.parse(localStorage.getItem('reports')) || [];
-            const reportIndex = reports.findIndex(r => r.id == reportId);
-
-            if (reportIndex > -1) {
-                reports[reportIndex].feedback = feedbackText;
-                localStorage.setItem('reports', JSON.stringify(reports));
-                showNotification('Feedback saved successfully!');
-            }
-        }
-
-        function loadStudentProjectDetails(studentUsername) {
+        function displayProjectDetails(studentUsername) {
             const projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const project = projects.find(p => p.assignedTo === studentUsername);
+            const project = projects.find(p => p.assignedTo === studentUsername && p.status === 'in_progress');
             const container = document.getElementById('student-project-details-container');
 
-            if (!project || project.status !== 'in_progress') {
+            if (!project) {
                 container.innerHTML = '';
                 return;
             }
 
-            let completeButton = '';
-            if (project.progress == 100) {
-                completeButton = `<button class="btn btn-warning mt-2" id="request-completion-btn" data-id="${project.id}">Request Completion Approval</button>`;
-            }
-
+            const completeButton = project.progress == 100 ? `<button class="btn btn-warning mt-2 request-completion-btn" data-id="${project.id}">Request Completion Approval</button>` : '';
             container.innerHTML = `
-                <div class="card">
-                    <div class="card-header"><h3 class="h5 mb-0">Project Progress: ${project.title}</h3></div>
-                    <div class="card-body">
-                        <form id="progress-update-form" data-id="${project.id}">
-                            <label for="progress-range" class="form-label">Progress: <span id="progress-value">${project.progress}</span>%</label>
-                            <input type="range" class="form-range" min="0" max="100" value="${project.progress}" id="progress-range">
-                            <button type="submit" class="btn btn-primary btn-sm">Update Progress</button>
-                            ${completeButton}
-                        </form>
-                    </div>
-                </div>
-            `;
+                <div class="card"><div class="card-header"><h3 class="h5 mb-0">Project Progress: ${project.title}</h3></div><div class="card-body">
+                <form class="progress-update-form" data-id="${project.id}"><label for="progress-range" class="form-label">Progress: <span class="progress-value">${project.progress}</span>%</label><input type="range" class="form-range" min="0" max="100" value="${project.progress}" class="progress-range"><button type="submit" class="btn btn-primary btn-sm">Update Progress</button>${completeButton}</form>
+                </div></div>`;
 
-            const rangeInput = document.getElementById('progress-range');
-            const progressValue = document.getElementById('progress-value');
-            rangeInput.addEventListener('input', () => {
-                progressValue.textContent = rangeInput.value;
+            container.querySelector('.progress-range').addEventListener('input', (e) => {
+                container.querySelector('.progress-value').textContent = e.target.value;
             });
-
-            document.getElementById('progress-update-form').addEventListener('submit', (e) => {
-                e.preventDefault();
-                updateProjectProgress(e.target.dataset.id, rangeInput.value);
-            });
-
+            container.querySelector('.progress-update-form').addEventListener('submit', handleProgressUpdate);
             if (project.progress == 100) {
-                document.getElementById('request-completion-btn').addEventListener('click', (e) => {
-                    requestCompletion(e.target.dataset.id);
-                });
+                container.querySelector('.request-completion-btn').addEventListener('click', handleRequestCompletion);
             }
         }
 
-        function updateProjectProgress(projectId, progress) {
-            let projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const projectIndex = projects.findIndex(p => p.id == projectId);
-
-            if (projectIndex > -1) {
-                projects[projectIndex].progress = progress;
-                localStorage.setItem('projects', JSON.stringify(projects));
-                showNotification('Progress updated successfully!');
-                loadStudentProjectDetails(projects[projectIndex].assignedTo); // Refresh the view
-            }
-        }
-
-        function requestCompletion(projectId) {
-            let projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const projectIndex = projects.findIndex(p => p.id == projectId);
-
-            if (projectIndex > -1) {
-                projects[projectIndex].status = 'pending_completion_approval';
-                localStorage.setItem('projects', JSON.stringify(projects));
-                showNotification('Project marked as complete. Awaiting admin approval.');
-                loadStudentProjectDetails(projects[projectIndex].assignedTo);
-                document.getElementById('student-project-details-container').innerHTML = ''; // Hide after action
-            }
-        }
-
-        function loadAttendance(studentUsername) {
+        function displayAttendance(studentUsername) {
             const container = document.getElementById('student-attendance-container');
             const attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
             const studentAttendance = attendanceRecords.filter(a => a.studentUsername === studentUsername);
-
-            let historyTable = '<p>No attendance records yet.</p>';
-            if (studentAttendance.length > 0) {
-                historyTable = '<table class="table table-sm table-striped"><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>' +
-                studentAttendance.map(rec => `<tr><td>${rec.date}</td><td>${rec.status}</td></tr>`).join('') +
-                '</tbody></table>';
-            }
+            const historyTable = studentAttendance.length > 0 ? '<table class="table table-sm table-striped"><thead><tr><th>Date</th><th>Status</th></tr></thead><tbody>' + studentAttendance.map(rec => `<tr><td>${rec.date}</td><td>${rec.status}</td></tr>`).join('') + '</tbody></table>' : '<p>No attendance records yet.</p>';
 
             container.innerHTML = `
-                <div class="card">
-                    <div class="card-header"><h3 class="h5 mb-0">Manage Attendance</h3></div>
-                    <div class="card-body">
-                        <form id="attendance-form" data-student="${studentUsername}">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="attendance-date" class="form-label">Date</label>
-                                    <input type="date" class="form-control" id="attendance-date" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="attendance-status" class="form-label">Status</label>
-                                    <select class="form-select" id="attendance-status">
-                                        <option value="Present">Present</option>
-                                        <option value="Absent">Absent</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-secondary btn-sm">Mark Attendance</button>
-                        </form>
-                        <hr>
-                        <h5>Attendance History</h5>
-                        ${historyTable}
-                    </div>
-                </div>
-            `;
+                <div class="card"><div class="card-header"><h3 class="h5 mb-0">Manage Attendance</h3></div><div class="card-body">
+                <form class="attendance-form" data-student="${studentUsername}"><div class="row"><div class="col-md-6 mb-3"><label for="attendance-date" class="form-label">Date</label><input type="date" class="form-control attendance-date" required></div><div class="col-md-6 mb-3"><label for="attendance-status" class="form-label">Status</label><select class="form-select attendance-status"><option value="Present">Present</option><option value="Absent">Absent</option></select></div></div><button type="submit" class="btn btn-secondary btn-sm">Mark Attendance</button></form>
+                <hr><h5>Attendance History</h5>${historyTable}</div></div>`;
 
-            document.getElementById('attendance-form').addEventListener('submit', handleMarkAttendance);
+            container.querySelector('.attendance-form').addEventListener('submit', handleMarkAttendance);
+        }
+
+        function displayReports(studentUsername) {
+            const container = document.getElementById('student-reports-container');
+            container.innerHTML = `<h4 class="mb-3">Reports for ${studentUsername}</h4>`;
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const activeProject = projects.find(p => p.assignedTo === studentUsername && p.status === 'in_progress');
+
+            if (!activeProject) {
+                container.innerHTML += '<div class="alert alert-warning">This student does not have an active project yet. Reports can be submitted once a project is in progress.</div>';
+                return;
+            }
+            const reports = JSON.parse(localStorage.getItem('reports')) || [];
+            const studentReports = reports.filter(r => r.studentUsername === studentUsername);
+
+            if (studentReports.length > 0) {
+                container.innerHTML += studentReports.map(report => `<div class="card mb-3"><div class="card-header d-flex justify-content-between"><h5 class="mb-0">${report.title}</h5><small>Submitted on: ${new Date(report.timestamp).toLocaleDateString()}</small></div><div class="card-body"><p class="card-text">${report.content}</p><hr><form class="feedback-form" data-report-id="${report.id}"><div class="mb-3"><label class="form-label"><strong>Your Feedback:</strong></label><textarea class="form-control feedback-text" rows="3" placeholder="Provide feedback...">${report.feedback || ''}</textarea></div><button type="submit" class="btn btn-sm btn-success">Save Feedback</button></form></div></div>`).join('');
+                container.querySelectorAll('.feedback-form').forEach(form => form.addEventListener('submit', handleFeedbackSubmit));
+            } else {
+                container.innerHTML += '<div class="alert alert-secondary">This student has not submitted any reports.</div>';
+            }
+        }
+
+        function handleProgressUpdate(e) {
+            e.preventDefault();
+            const projectId = e.target.dataset.id;
+            const progress = e.target.querySelector('.progress-range').value;
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+            if (projectIndex > -1) {
+                projects[projectIndex].progress = progress;
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Progress updated!');
+                displayProjectDetails(projects[projectIndex].assignedTo);
+            }
+        }
+
+        function handleRequestCompletion(e) {
+            const projectId = e.target.dataset.id;
+            let projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const projectIndex = projects.findIndex(p => p.id == projectId);
+            if (projectIndex > -1) {
+                projects[projectIndex].status = 'pending_completion_approval';
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showNotification('Project marked as complete, awaiting admin approval.');
+                displayStudentDetails(projects[projectIndex].assignedTo);
+            }
         }
 
         function handleMarkAttendance(e) {
             e.preventDefault();
             const studentUsername = e.target.dataset.student;
-            const date = document.getElementById('attendance-date').value;
-            const status = document.getElementById('attendance-status').value;
-
-            if (!date) {
-                showNotification('Please select a date.', 'error');
-                return;
-            }
-
+            const date = e.target.querySelector('.attendance-date').value;
+            const status = e.target.querySelector('.attendance-status').value;
+            if (!date) { showNotification('Please select a date.', 'error'); return; }
             let attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
-            // Optional: check for duplicate entry for the same student on the same date
             const existingRecord = attendanceRecords.findIndex(rec => rec.studentUsername === studentUsername && rec.date === date);
             if (existingRecord > -1) {
-                attendanceRecords[existingRecord].status = status; // Update existing
+                attendanceRecords[existingRecord].status = status;
             } else {
                 attendanceRecords.push({ studentUsername, date, status });
             }
-
             localStorage.setItem('attendance', JSON.stringify(attendanceRecords));
             showNotification('Attendance marked successfully.');
-            loadAttendance(studentUsername); // Refresh attendance view
+            displayAttendance(studentUsername);
+        }
+
+        function handleFeedbackSubmit(e) {
+            e.preventDefault();
+            const reportId = e.target.dataset.reportId;
+            const feedbackText = e.target.querySelector('.feedback-text').value;
+            let reports = JSON.parse(localStorage.getItem('reports')) || [];
+            const reportIndex = reports.findIndex(r => r.id == reportId);
+            if (reportIndex > -1) {
+                reports[reportIndex].feedback = feedbackText;
+                localStorage.setItem('reports', JSON.stringify(reports));
+                showNotification('Feedback saved successfully!');
+            }
         }
     }
 
