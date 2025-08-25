@@ -387,6 +387,14 @@ document.addEventListener('DOMContentLoaded', () => {
             loadAttendance(studentUsername); // Add this call
 
             reportsContainer.innerHTML = `<h4 class="mb-3">Reports for ${studentUsername}</h4>`;
+            const projects = JSON.parse(localStorage.getItem('projects')) || [];
+            const activeProject = projects.find(p => p.assignedTo === studentUsername && p.status === 'in_progress');
+
+            if (!activeProject) {
+                reportsContainer.innerHTML += '<div class="alert alert-warning">This student does not have an active project yet. Reports can be submitted once a project is in progress.</div>';
+                return;
+            }
+
             const reports = JSON.parse(localStorage.getItem('reports')) || [];
             const studentReports = reports.filter(r => r.studentUsername === studentUsername);
 
