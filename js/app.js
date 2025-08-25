@@ -391,28 +391,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const studentReports = reports.filter(r => r.studentUsername === studentUsername);
 
             if (studentReports.length > 0) {
-                reportsContainer.innerHTML += '<div class="accordion" id="reportsAccordion">' + studentReports.map((report, index) => `
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="heading${report.id}">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse${report.id}" aria-expanded="false" aria-controls="collapse${report.id}">
-                                ${report.title} - <small class="ms-2">Submitted on: ${new Date(report.timestamp).toLocaleDateString()}</small>
-                            </button>
-                        </h2>
-                        <div id="collapse${report.id}" class="accordion-collapse collapse" aria-labelledby="heading${report.id}" data-bs-parent="#reportsAccordion">
-                            <div class="accordion-body">
-                                <p>${report.content}</p>
-                                <hr>
-                                <form class="feedback-form" data-report-id="${report.id}">
-                                    <div class="mb-3">
-                                        <label class="form-label"><strong>Feedback</strong></label>
-                                        <textarea class="form-control" name="feedback" rows="3" placeholder="Provide feedback...">${report.feedback || ''}</textarea>
-                                    </div>
-                                    <button type="submit" class="btn btn-sm btn-success">Save Feedback</button>
-                                </form>
-                            </div>
+                reportsContainer.innerHTML += studentReports.map(report => `
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between">
+                            <h5 class="mb-0">${report.title}</h5>
+                            <small>Submitted on: ${new Date(report.timestamp).toLocaleDateString()}</small>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-text">${report.content}</p>
+                            <hr>
+                            <form class="feedback-form" data-report-id="${report.id}">
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Your Feedback:</strong></label>
+                                    <textarea class="form-control" name="feedback" rows="3" placeholder="Provide feedback...">${report.feedback || ''}</textarea>
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-success">Save Feedback</button>
+                            </form>
                         </div>
                     </div>
-                `).join('') + '</div>';
+                `).join('');
 
                 document.querySelectorAll('.feedback-form').forEach(form => {
                     form.addEventListener('submit', saveFeedback);
