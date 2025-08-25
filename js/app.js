@@ -181,7 +181,18 @@ document.addEventListener('DOMContentLoaded', () => {
         function loadSupervisorInfo() {
             const container = document.getElementById('supervisor-info-container');
             if (loggedInUser && loggedInUser.supervisor) {
-                container.innerHTML = `<p class="mb-0">Your assigned supervisor is <strong>${loggedInUser.supervisor}</strong>.</p>`;
+                const users = JSON.parse(localStorage.getItem('users')) || [];
+                const supervisor = users.find(u => u.username === loggedInUser.supervisor);
+
+                if (supervisor) {
+                    container.innerHTML = `
+                        <h5 class="card-title">${supervisor.fullName}</h5>
+                        <p class="card-text mb-1"><strong>Email:</strong> ${supervisor.email}</p>
+                        <p class="card-text mb-0"><strong>Phone:</strong> ${supervisor.phone || 'N/A'}</p>
+                    `;
+                } else {
+                    container.innerHTML = `<p class="mb-0">Your assigned supervisor is <strong>${loggedInUser.supervisor}</strong> (details not found).</p>`;
+                }
             } else {
                 container.innerHTML = `<p class="mb-0 text-muted">Not yet assigned.</p>`;
             }
@@ -341,13 +352,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadAssignedStudents() {
-            const projects = JSON.parse(localStorage.getItem('projects')) || [];
-            const myStudentsProjects = projects.filter(p => p.supervisor === loggedInUser.username && p.status === 'in_progress');
-            const myStudents = [...new Set(myStudentsProjects.map(p => p.assignedTo))]; // Get unique student usernames
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const myStudents = users.filter(u => u.userType === 'student' && u.supervisor === loggedInUser.username);
 
             if (myStudents.length > 0) {
-                studentsList.innerHTML = myStudents.map(studentUsername =>
-                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student="${studentUsername}">${studentUsername}</a>`
+                studentsList.innerHTML = myStudents.map(student =>
+                    `<a href="#" class="list-group-item list-group-item-action student-link" data-student="${student.username}">${student.fullName} (${student.username})</a>`
                 ).join('');
 
                 document.querySelectorAll('.student-link').forEach(link => {
@@ -833,7 +843,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         addUserForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            const fullName = document.getElementById('new-fullname').value;
             const username = document.getElementById('new-username').value;
+            const email = document.getElementById('new-email').value;
+            const phone = document.getElementById('new-phone').value;
             const password = document.getElementById('new-password').value;
             const userType = document.getElementById('new-user-type').value;
             let users = JSON.parse(localStorage.getItem('users')) || [];
@@ -843,7 +856,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            users.push({ username, password, userType, status: 'approved' }); // Admins create approved users
+            const newUser = {
+                username,
+                password,
+                userType,
+                fullName,
+                email,
+                phone,
+                status: 'approved' // Admins create approved users
+            };
+
+            // Students created by an admin don't need to go through the pending queue
+            // but they will need a supervisor assigned in the next step.
+            if (userType === 'student') {
+                // we can leave the supervisor field blank for now
+            }
+
+            users.push(newUser);
             localStorage.setItem('users', JSON.stringify(users));
             showNotification('User added successfully!');
             addUserForm.reset();
