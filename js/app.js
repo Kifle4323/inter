@@ -180,9 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function loadSupervisorInfo() {
             const container = document.getElementById('supervisor-info-container');
-            if (loggedInUser && loggedInUser.supervisor) {
-                const users = JSON.parse(localStorage.getItem('users')) || [];
-                const supervisor = users.find(u => u.username === loggedInUser.supervisor);
+            const allUsers = JSON.parse(localStorage.getItem('users')) || [];
+            // Re-fetch the user's data from localStorage to ensure it's not stale from sessionStorage
+            const freshLoggedInUser = allUsers.find(u => u.username === loggedInUser.username);
+
+            if (freshLoggedInUser && freshLoggedInUser.supervisor) {
+                const supervisor = allUsers.find(u => u.username === freshLoggedInUser.supervisor);
 
                 if (supervisor) {
                     container.innerHTML = `
@@ -191,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="card-text mb-0"><strong>Phone:</strong> ${supervisor.phone || 'N/A'}</p>
                     `;
                 } else {
-                    container.innerHTML = `<p class="mb-0">Your assigned supervisor is <strong>${loggedInUser.supervisor}</strong> (details not found).</p>`;
+                    container.innerHTML = `<p class="mb-0">Your assigned supervisor is <strong>${freshLoggedInUser.supervisor}</strong> (details not found).</p>`;
                 }
             } else {
                 container.innerHTML = `<p class="mb-0 text-muted">Not yet assigned.</p>`;
